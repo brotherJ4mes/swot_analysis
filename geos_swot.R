@@ -10,7 +10,6 @@ var_name='ssh_karin_2' # name for L2
 #fin = '../data_swot/calval/out.nc'
 fin = 'ont_L2_LR_SSH_basic.nc'
 
-omega = 0.00007292 # earths rotation (for f)
 
 print('reading SWOT...')
 ncid = nc_open(fin)
@@ -24,12 +23,12 @@ df = data.frame(lon=lons, lat=lats, eta=ssh)
 #df = df[!is.na(df$eta),]
 
 print('reading lakes...')
-#lks = st_geometry(st_read('homes_shoreline.kml'))
+lks = st_geometry(st_read('homes_shoreline.kml'))
 
 print('vectorizing...')
 pts = vect(df, crs='+proj=longlat +datum=WGS84')
 
-#print('cropping...')
+##print('cropping...')
 #pts = crop(pts, vect(lks), ext=T)
 pts = na.omit(pts, field='eta')
 
@@ -39,9 +38,8 @@ print('intersecting...')
 #pts = pts[sel_water,]
 
 #print('skipping intersecting!')
-#sel_water = is.related(pts, vect(lks), 'intersects')
-#pts_lk = pts
-print('done...')
+sel_water = is.related(pts, vect(lks), 'intersects')
+pts = pts[sel_water,]
 
 egm = rast('egm2008_GL.tif')
 egm_pts = extract(egm, pts)
@@ -51,42 +49,47 @@ pts$eta = pts$eta - egm_pts$geoid_undulation
 #egm_pts = extract(egm, pts_lk)
 #pts_lk$adj = pts_lk$eta - egm_pts$geoid_undulation
 
-
-
-
-r_tmpl <- rast(ext(pts), resolution = 2.5e-2, crs = crs(pts)) # res in degrees (guessed to match LR resolution)
-r_surf <- interpIDW(r_tmpl, pts, field = "eta", radius = 50, power = 2)
+print('rasterizing...')
+r_eta = rast(ext(pts), resolution = 2.5e-2, crs = crs(pts)) # res in degrees (guessed to match LR resolution)
+r_eta = interpIDW(r_eta, pts, field = "eta", radius = 50, power = 2)
+print('done')
 
 
 # Unscaled Horn kernels (numerator only: units of eta)
-wx_raw <- matrix(c(-1, 0, 1,
+wgts_x <- matrix(c(-1, 0, 1,
                    -2, 0, 2,
-                   -1, 0, 1), nrow = 3, byrow = TRUE)
+                   -1, 0, 1)/8, nrow = 3, byrow = TRUE)
 
-wy_raw <- matrix(c( 1,  2,  1,
+wgts_y <- matrix(c( 1,  2,  1,
                     0,  0,  0,
-                   -1, -2, -1), nrow = 3, byrow = TRUE)
+                   -1, -2, -1)/8, nrow = 3, byrow = TRUE)
 
 # Cell-center latitude in radians
-lat_rad <- init(r_surf, "y") * (pi / 180)
-
+lat_rad = init(r_eta, "y") * (pi / 180)
 # Physical cell widths in meters (WGS84 equatorial radius R = 6,378,137 m)
-R <- 6378137
-dx_m <- (res(r_surf)[1] * pi / 180) * R * cos(lat_rad)
-dy_m <- (res(r_surf)[2] * pi / 180) * R
+R_e = 6378137
+dx_m = (res(r_eta)[1] * pi / 180) * R_e * cos(lat_rad)
+dy_m = (res(r_eta)[2] * pi / 180) * R_e
 
 # True physical partial derivatives in [units of eta / meter]
-d_eta_dx <- focal(r_surf, w = wx_raw, fun = "sum") / (8 * dx_m)
-d_eta_dy <- focal(r_surf, w = wy_raw, fun = "sum") / (8 * dy_m)
+d_eta_dx <- focal(r_eta, w = wgts_x, fun = "sum") / dx_m
+d_eta_dy <- focal(r_eta, w = wgts_y, fun = "sum") / dy_m
 
 grad_xy <- c(d_eta_dx, d_eta_dy)
 names(grad_xy) <- c("d_eta_dx", "d_eta_dy")
 
-
+omega = 0.00007292 # earths rotation (for f)
 lats = crds(grad_xy)[,2]*pi/180
 f = 2*omega*sin(lats)
 
 
+#dn/dx = -fv; dn/dy = fu
+
+u = grad_xy$d_eta_dy/-mean(f)
+v = grad_xy$d_eta_dx/mean(f)
+
+
+msk = mask(r_eta, vect(lks))
 
 
 
