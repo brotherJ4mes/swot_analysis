@@ -10,7 +10,6 @@ var_name='ssh_karin_2' # name for L2
 #fin = '../data_swot/calval/out.nc'
 fin = 'ont_L2_LR_SSH_basic.nc'
 
-
 print('reading SWOT...')
 ncid = nc_open(fin)
 lons = as.vector(ncvar_get(ncid,'longitude'))
@@ -23,31 +22,27 @@ df = data.frame(lon=lons, lat=lats, eta=ssh)
 #df = df[!is.na(df$eta),]
 
 print('reading lakes...')
-lks = st_geometry(st_read('homes_shoreline.kml'))
+lks = st_read('homes_shoreline.kml')
+print('fixing lakes (write this out)...')
+lks = st_make_valid(lks)
 
 print('vectorizing...')
 pts = vect(df, crs='+proj=longlat +datum=WGS84')
 
-##print('cropping...')
-#pts = crop(pts, vect(lks), ext=T)
-pts = na.omit(pts, field='eta')
+print('cropping...')
+pts = mask(pts, vect(lks))
+#pts = na.omit(pts, field='eta')
 
 #plot(pts, 'eta', type='continuous')
-print('intersecting...')
+#print('skipping intersecting!')
+##print('intersecting...')
 #sel_water = is.related(pts, vect(lks), 'intersects')
 #pts = pts[sel_water,]
-
-#print('skipping intersecting!')
-sel_water = is.related(pts, vect(lks), 'intersects')
-pts = pts[sel_water,]
 
 egm = rast('egm2008_GL.tif')
 egm_pts = extract(egm, pts)
 pts$eta = pts$eta - egm_pts$geoid_undulation
 
-#egm_pts = extract(egm, pts_lk)
-#egm_pts = extract(egm, pts_lk)
-#pts_lk$adj = pts_lk$eta - egm_pts$geoid_undulation
 
 print('rasterizing...')
 r_eta = rast(ext(pts), resolution = 2.5e-2, crs = crs(pts)) # res in degrees (guessed to match LR resolution)
@@ -66,6 +61,7 @@ wgts_y <- matrix(c( 1,  2,  1,
 
 # Cell-center latitude in radians
 lat_rad = init(r_eta, "y") * (pi / 180)
+
 # Physical cell widths in meters (WGS84 equatorial radius R = 6,378,137 m)
 R_e = 6378137
 dx_m = (res(r_eta)[1] * pi / 180) * R_e * cos(lat_rad)
@@ -82,15 +78,22 @@ omega = 0.00007292 # earths rotation (for f)
 lats = crds(grad_xy)[,2]*pi/180
 f = 2*omega*sin(lats)
 
-
 #dn/dx = -fv; dn/dy = fu
 
+# plot eta
+plot(r_eta)
+plot(lks, add=T)
+plot(pts, add=T, pch=20, cex=.1)
+
+# TODO: fix dimension mismatch 
 u = grad_xy$d_eta_dy/-mean(f)
 v = grad_xy$d_eta_dx/mean(f)
+speed = sqrt(u^2+v^2)
 
+print('masking the raster...')
+r_eta = mask(r_eta, pts)
 
-msk = mask(r_eta, vect(lks))
-
+vectorplot(raster::stack(c(u,v)), isField = "dXY", par.settings = viridisTheme())
 
 
 # Smooth interpolation via Thin Plate Spline (requires fields)
@@ -120,7 +123,6 @@ msk = mask(r_eta, vect(lks))
 
 #plot(lks)
 #plot(pts, 'eta', add=T)
-
 
 
 #print('plotting...')
