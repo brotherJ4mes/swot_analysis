@@ -1,3 +1,5 @@
 big_files/*
 big_files/*/*
 orbit/doc.kml
+png/*
+png/
