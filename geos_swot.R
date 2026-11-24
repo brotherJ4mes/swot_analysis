@@ -1,5 +1,6 @@
 #!/bin/Rscript
 library(terra)
+library(sf)
 library(ncdf4)
 
 #varname='ssha_unfiltered'
@@ -8,7 +9,8 @@ var_name='ssh_karin_2' # name for L2
 #fin = 'SWOT_L2_LR_SSH_Basic_032_160_20250503T171118_20250503T180246_PIC2_01.nc'
 #fin = 'SWOT_L2_LR_SSH_Expert_032_119_20250502T060159_20250502T065327_PIC2_01.nc'
 #fin = '../data_swot/calval/out.nc'
-fin = 'ont_L2_LR_SSH_basic.nc'
+#fin = 'ont_L2_LR_SSH_basic.nc'
+fin = commandArgs(trail=T)
 out_dir = 'png'
 
 print('reading SWOT...')
@@ -16,7 +18,7 @@ ncid = nc_open(fin)
 lons = as.vector(ncvar_get(ncid,'longitude'))
 lats = as.vector(ncvar_get(ncid,'latitude'))
 ssh  = as.vector(ncvar_get(ncid, var_name))
-valid_dt = mean(as.POSIXct(ncvar_get(ncid, 'time'), origin='2000-01-01', tz='UTC'))
+valid_dt = mean(as.POSIXct(ncvar_get(ncid, 'time'), origin='2000-01-01', tz='UTC'), na.rm=T)
 date_str = format(valid_dt, '%Y-%b-%d %HZ')
 print(date_str)
 
